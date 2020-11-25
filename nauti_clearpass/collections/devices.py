@@ -29,6 +29,7 @@ from nauti.collection import Collection, CollectionCallback
 from nauti.collections.devices import DeviceCollection
 from nauti_clearpass.source import ClearpassSource, CPPMClient
 from nauti.mappings import normalize_hostname
+from nauti.config_models import CollectionSourceModel
 
 # -----------------------------------------------------------------------------
 # Exports
@@ -49,12 +50,34 @@ class ClearpassDeviceCollection(Collection, DeviceCollection):
     source_class = ClearpassSource
 
     async def fetch(self, **params):
-        breakpoint()
         if (filters := params.get("filters")) is not None:
             params["filters"] = parse_filter(filters)
 
         client: CPPMClient = self.source.client
         self.source_records.extend(await client.fetch_devices())
+
+    def _normalize_vendor(self, rec: Dict) -> str:
+        """
+        This method is used to map a Clearpass Vendor value to a shared
+        vendor field name.  There are cases, such as Cisco, where there
+        is not a 1-to-1 mapping between field.vendor and CP.Vendor.  In
+        these cases the configuration file uses a "<vendor>:<map-os_name>"
+        syntax where the <map-name> is used as the second-stage lookup
+        based on field.os_name.
+
+        Parameters
+        ----------
+        rec: dict
+            The native Clearpass device record
+
+        Returns
+        -------
+        str: field.vendor normalized value.
+        """
+        cp_cfg = self.config.sources[ClearpassSource.name]
+        v_map = cp_cfg.maps['vendor']
+        vendor_name = v_map.get(rec['vendor_name'])
+        return vendor_name.split(':')[0]
 
     def itemize(self, rec: Dict) -> Dict:
         attrs = rec['attributes']
@@ -64,7 +87,7 @@ class ClearpassDeviceCollection(Collection, DeviceCollection):
             ipaddr=rec["ip_address"],
             site=attrs["Location"],
             os_name=attrs["OS Version"],
-            vendor=rec["vendor_name"],
+            vendor=self._normalize_vendor(rec),
             model=''
         )
 
