@@ -60,4 +60,4 @@ await nb_devs.source.login()
 await nb_devs.fetch(filters={'has_primary_ip': "true"})
 nb_devs.make_keys(*shared_keys, with_filter=nb_filter_item)
 
-diff_res = diff(source_from=nb_devs, sync_to=cp_devs, fields=shared_fields)
+diff_res = diff(origin=nb_devs, target=cp_devs, fields=shared_fields)
