@@ -20,10 +20,10 @@ from nauti.diff import diff
 
 load_default_config_file()
 
-shared_fields = ('hostname', 'site', 'os_name', 'ipaddr')
-shared_keys = ('hostname', )
+shared_fields = ("hostname", "site", "os_name", "ipaddr")
+shared_keys = ("hostname",)
 
-cp_devs = get_collection(get_source('clearpass', timeout=5), 'devices')
+cp_devs = get_collection(get_source("clearpass", timeout=5), "devices")
 await cp_devs.source.login()
 await cp_devs.fetch()
 cp_devs.make_keys(*shared_keys)
@@ -31,33 +31,30 @@ cp_devs.make_keys(*shared_keys)
 
 def tr_nb_rec(item):
 
-    os_name = item['os_name']
-    item['os_name'] = {
-        'iosxe': 'ios-xe',
-        'nxos': 'nx-os'
-    }.get(os_name, os_name)
+    os_name = item["os_name"]
+    item["os_name"] = {"iosxe": "ios-xe", "nxos": "nx-os"}.get(os_name, os_name)
 
 
 def nb_filter_item(item) -> bool:
     tr_nb_rec(item)
-    if not item['os_name']:
+    if not item["os_name"]:
         return False
 
-    if not item['ipaddr']:
+    if not item["ipaddr"]:
         return False
 
-    if item['vendor'] == 'pan':
+    if item["vendor"] == "pan":
         return False
 
-    if item['status'] != 'active':
+    if item["status"] != "active":
         return False
 
     return True
 
 
-nb_devs = get_collection(get_source('netbox', timeout=60), 'devices')
+nb_devs = get_collection(get_source("netbox", timeout=60), "devices")
 await nb_devs.source.login()
-await nb_devs.fetch(filters={'has_primary_ip': "true"})
+await nb_devs.fetch(filters={"has_primary_ip": "true"})
 nb_devs.make_keys(*shared_keys, with_filter=nb_filter_item)
 
 diff_res = diff(origin=nb_devs, target=cp_devs, fields=shared_fields)

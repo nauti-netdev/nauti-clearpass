@@ -15,10 +15,7 @@
 #
 
 from setuptools import setup, find_packages
-from nauti.entrypoints import (
-    find_collection_entrypoints, NAUTI_EP_COLLECTIONS,
-    find_source_entrypoints, NAUTI_EP_SOURCES
-)
+from pathlib import Path
 
 
 package_name = "nauti-clearpass"
@@ -39,6 +36,13 @@ with open("README.md", "r") as fh:
 #
 # -----------------------------------------------------------------------------
 
+plugins = [
+    f"{fp.stem} = nauti_clearpass.collections.{fp.stem}"
+    for fp in Path("nauti_clearpass/collections").glob("[!_]*.py")
+]
+
+plugins.append("clearpass = nauti_clearpass.source")
+
 setup(
     name=package_name,
     version=package_version,
@@ -49,10 +53,7 @@ setup(
     packages=find_packages(),
     include_package_data=True,
     install_requires=requirements(),
-    entry_points={
-        NAUTI_EP_SOURCES: find_source_entrypoints('nauti_clearpass'),
-        NAUTI_EP_COLLECTIONS: find_collection_entrypoints('nauti_clearpass/collections')
-    },
+    entry_points={"nauti.plugins": plugins},
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",

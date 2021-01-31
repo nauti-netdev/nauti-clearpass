@@ -19,8 +19,6 @@
 
 from typing import Dict, Optional
 
-from aioipfabric.filters import parse_filter
-
 # -----------------------------------------------------------------------------
 # Private Imports
 # -----------------------------------------------------------------------------
@@ -29,7 +27,6 @@ from nauti.collection import Collection, CollectionCallback
 from nauti.collections.devices import DeviceCollection
 from nauti_clearpass.source import ClearpassSource, CPPMClient
 from nauti.mappings import normalize_hostname
-from nauti.config_models import CollectionSourceModel
 
 # -----------------------------------------------------------------------------
 # Exports
@@ -50,13 +47,17 @@ class ClearpassDeviceCollection(Collection, DeviceCollection):
     source_class = ClearpassSource
 
     async def fetch(self, **params):
-        if (filters := params.get("filters")) is not None:
-            params["filters"] = parse_filter(filters)
-
+        filters = params.get("filters")
         client: CPPMClient = self.source.client
-        self.source_records.extend(await client.fetch_devices())
+        self.source_records.extend(await client.fetch_devices(params=filters))
 
-    def _normalize_vendor(self, rec: Dict) -> str:
+    # -------------------------------------------------------------------------
+    #
+    #                            PRIVATE METHODS
+    #
+    # -------------------------------------------------------------------------
+
+    def _vendor_normalize(self, rec: Dict) -> str:
         """
         This method is used to map a Clearpass Vendor value to a shared
         vendor field name.  There are cases, such as Cisco, where there
@@ -74,32 +75,92 @@ class ClearpassDeviceCollection(Collection, DeviceCollection):
         -------
         str: field.vendor normalized value.
         """
-        cp_cfg = self.config.sources[ClearpassSource.name]
-        v_map = cp_cfg.maps['vendor']
-        vendor_name = v_map.get(rec['vendor_name'])
-        return vendor_name.split(':')[0]
+        os_ver = rec["attributes"]["OS Version"]
+        os_to_vendor = self.config.fields["os_name"]
+        return os_to_vendor[os_ver]
+
+    def _vendor_clearpass(self, rec: Dict) -> str:
+        """
+        This function returns the ClearPass NetworkDevice vendor value that is
+        associated with the record `os_name`.  This is used when creating new
+        ClearPass NetworkDevice records.
+
+        Parameters
+        ----------
+        rec: dict
+            The normalized item fields of this record.
+        """
+        return self.config.sources[ClearpassSource.name].maps["vendors"][rec["os_name"]]
+
+    # -------------------------------------------------------------------------
+    #
+    #               Normalize ClearPass record to Collection Fields
+    #
+    # -------------------------------------------------------------------------
 
     def itemize(self, rec: Dict) -> Dict:
-        attrs = rec['attributes']
+        attrs = rec["attributes"]
         return dict(
-            sn='',
+            sn="",
             hostname=normalize_hostname(rec["name"]),
             ipaddr=rec["ip_address"],
             site=attrs["Location"],
             os_name=attrs["OS Version"],
-            vendor=self._normalize_vendor(rec),
-            model=''
+            vendor=self._vendor_normalize(rec),
+            model="",
         )
 
-    async def add_items(self, items: Dict, callback: Optional[CollectionCallback] = None):
-        pass
+    # -------------------------------------------------------------------------
+    #
+    #                         Add Devices to Clearpass
+    #
+    # -------------------------------------------------------------------------
+
+    async def add_items(
+        self, items: Dict, callback: Optional[CollectionCallback] = None
+    ):
+        client: CPPMClient = self.source.client
+
+        def _create_task(key, fields):  # noqa
+            payload = {
+                "name": fields["hostname"],
+                "description": "",
+                "ip_address": fields["ipaddr"],
+                "tacacs_secret": self.source.config.vars[
+                    "tacacs_secret"
+                ].get_secret_value(),
+                "radius_secret": "",
+                "vendor_name": self._vendor_clearpass(fields),
+                "coa_port": 3799,
+                "coa_capable": False,
+                "attributes": {
+                    "Location": fields["site"],
+                    "OS Version": fields["os_name"],
+                },
+            }
+
+            return client.create_device(payload=payload)
+
+        await self.source.update(items, callback, _create_task)
+
+    # -------------------------------------------------------------------------
+    #
+    #                     Update Existing Devices in Clearpass
+    #
+    # -------------------------------------------------------------------------
 
     async def update_items(
         self, items: Dict, callback: Optional[CollectionCallback] = None
     ):
-        pass
+        raise NotImplementedError()
+
+    # -------------------------------------------------------------------------
+    #
+    #                         Remove Devices from ClearPass
+    #
+    # -------------------------------------------------------------------------
 
     async def delete_items(
         self, items: Dict, callback: Optional[CollectionCallback] = None
     ):
-        pass
+        raise NotImplementedError()

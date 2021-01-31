@@ -47,17 +47,19 @@ class ClearpassSource(Source):
     name = NAUTI_SOURCE_NAME
     client_class = CPPMClient
 
-    def __init__(self, source_config: Optional[SourcesModel] = None, **kwargs):
-        super(ClearpassSource, self).__init__()
+    def __init__(self, config: Optional[SourcesModel] = None, **kwargs):
+        super(ClearpassSource, self).__init__(config, **kwargs)
         initargs = dict()
 
-        if source_config:
-            initargs.update(dict(
-                base_url=source_config.default.url,
-                client_id=source_config.default.credentials.client_id.get_secret_value(),
-                client_secret=source_config.default.credentials.client_secret.get_secret_value(),
-                **source_config.default.options
-            ))
+        if config:
+            initargs.update(
+                dict(
+                    base_url=config.default.url,
+                    client_id=config.default.credentials.client_id.get_secret_value(),
+                    client_secret=config.default.credentials.client_secret.get_secret_value(),
+                    **config.default.options,
+                )
+            )
             initargs.update(kwargs)
 
         self.client = CPPMClient(**(initargs or kwargs))
